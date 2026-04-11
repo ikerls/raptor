@@ -191,6 +191,7 @@ jobs:
           DIGEST: ${{ steps.push.outputs.digest }}
           COSIGN_EXPERIMENTAL: false
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
 
       # OPTIONAL: SBOM Attestation
       # Attaches SBOM (Software Bill of Materials) to your signed image for supply chain security.
