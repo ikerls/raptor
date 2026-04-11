@@ -4,6 +4,7 @@ set -eoux pipefail
 
 echo "Installing Niri..."
 
+# shellcheck source=/dev/null
 source /ctx/build/copr-helpers.sh
 
 dnf5 -y install \
