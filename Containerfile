@@ -1,7 +1,7 @@
 ###############################################################################
 # PROJECT NAME CONFIGURATION
 ###############################################################################
-# Name: finpilot
+# Name: raptor
 #
 # IMPORTANT: Change "finpilot" above to your desired project name.
 # This name should be used consistently throughout the repository in:
@@ -23,13 +23,13 @@
 #
 # 1. Context Stage (ctx) - Combines resources from:
 #    - Local build scripts and custom files
-#    - @projectbluefin/common - Desktop configuration shared with Aurora 
+#    - @projectbluefin/common - Desktop configuration shared with Aurora
 #    - @ublue-os/brew - Homebrew integration
 #
 # 2. Base Image Options:
 #    - `ghcr.io/ublue-os/silverblue-main:latest` (Fedora and GNOME)
-#    - `ghcr.io/ublue-os/base-main:latest` (Fedora and no desktop 
-#    - `quay.io/centos-bootc/centos-bootc:stream10 (CentOS-based)` 
+#    - `ghcr.io/ublue-os/base-main:latest` (Fedora and no desktop
+#    - `quay.io/centos-bootc/centos-bootc:stream10 (CentOS-based)`
 #
 # See: https://docs.projectbluefin.io/contributing/ for architecture diagram
 ###############################################################################
@@ -41,14 +41,15 @@ COPY build /build
 COPY custom /custom
 # Copy from OCI containers to distinct subdirectories to avoid conflicts
 # Note: Renovate can automatically update these :latest tags to SHA-256 digests for reproducibility
-COPY --from=ghcr.io/projectbluefin/common:latest@sha256:b8fe93b16674a547b4cf38493af19caa484d9575956fc3be04ca3d10faec23ff /system_files /oci/common
+COPY --from=ghcr.io/projectbluefin/common:latest@sha256:51a753b108b115196e01b8ee11462c1f3888500947ae9a43906d5596cc99f651 /system_files /oci/common
 COPY --from=ghcr.io/ublue-os/brew:latest@sha256:893a916a675c7d22b1140b7766c6d03b601c231e1e6aefbc57434bc27f32279e /system_files /oci/brew
 
 # Base Image - GNOME included
-FROM ghcr.io/ublue-os/silverblue-main:latest@sha256:f8d5fd28aa7bb0ed9e17e98e4f9fb174b6961a2dc4a3113b78c5dff4af5bdf6f
+FROM ghcr.io/ublue-os/silverblue-main:latest@sha256:ef31a4052e53e8f844b8471d9708e2bfff937f2ab7ce7204601406bcf6e7fc1b
+FROM ghcr.io/ublue-os/bluefin-dx-nvidia-open:stable
 
 ## Alternative base images, no desktop included (uncomment to use):
-# FROM ghcr.io/ublue-os/base-main:latest    
+# FROM ghcr.io/ublue-os/base-main:latest
 # FROM quay.io/centos-bootc/centos-bootc:stream10
 
 ## Alternative GNOME OS base image (uncomment to use):
@@ -63,7 +64,7 @@ FROM ghcr.io/ublue-os/silverblue-main:latest@sha256:f8d5fd28aa7bb0ed9e17e98e4f9f
 ## Uncomment the following line if one desires to make /opt immutable and be able to be used
 ## by the package manager.
 
-# RUN rm /opt && mkdir /opt
+RUN rm /opt && mkdir /opt
 
 ### MODIFICATIONS
 ## Make modifications desired in your image and install packages by modifying the build scripts.
@@ -80,8 +81,10 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
     --mount=type=cache,dst=/var/log \
     --mount=type=tmpfs,dst=/tmp \
-    /ctx/build/10-build.sh
-    
+    for script in /ctx/build/[0-9]*.sh; do \
+        echo "Running ${script}..." && \
+        bash "${script}" || exit 1; \
+    done
 ### LINTING
 ## Verify final image and contents are correct.
 RUN bootc container lint

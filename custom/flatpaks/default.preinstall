@@ -7,6 +7,9 @@
 [Flatpak Preinstall org.mozilla.firefox]
 Branch=stable
 
+[Flatpak Preinstall app.zen_browser.zen]
+Branch=stable
+
 [Flatpak Preinstall org.mozilla.Thunderbird]
 Branch=stable
 
@@ -68,12 +71,6 @@ Branch=stable
 [Flatpak Preinstall org.gnome.font-viewer]
 Branch=stable
 
-# Graphics & Media
-[Flatpak Preinstall com.github.PintaProject.Pinta]
-Branch=stable
-
-[Flatpak Preinstall com.github.rafostar.Clapper]
-Branch=stable
 
 # System Utilities
 [Flatpak Preinstall com.github.tchx84.Flatseal]
@@ -112,3 +109,41 @@ IsRuntime=true
 [Flatpak Preinstall org.gtk.Gtk3theme.adw-gtk3-dark]
 Branch=3.22
 IsRuntime=true
+
+# DEV Tools
+[Flatpak Preinstall io.podman_desktop.PodmanDesktop]
+Branch=stable
+
+[Flatpak Preinstall me.iepure.devtoolbox]
+Branch=stable
+
+[Flatpak Preinstall io.github.tobagin.digger]
+Branch=stable
+
+[Flatpak Preinstall io.github.getnf.embellish]
+Branch=stable
+
+# Extra Applications
+[Flatpak Preinstall com.axosoft.GitKraken]
+Branch=stable
+
+[Flatpak Preinstall com.github.ADBeveridge.Raider]
+Branch=stable
+
+[Flatpak Preinstall md.obsidian.Obsidian]
+Branch=stable
+
+[Flatpak Preinstall com.obsproject.Studio]
+Branch=stable
+
+[Flatpak Preinstall org.localsend.localsend_app]
+Branch=stable
+
+[Flatpak Preinstall hu.irl.cameractrls]
+Branch=stable
+
+[Flatpak Preinstall de.leopoldluley.Clapgrep]
+Branch=stable
+
+[Flatpak Preinstall org.libreoffice.LibreOffice]
+Branch=stable
