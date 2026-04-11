@@ -15,5 +15,4 @@ copr_install_isolated "quadratech188/cmark-gfm" \
 copr_install_isolated "quadratech188/vicinae" \
     vicinae
 
-systemctl --user enable vicinae
 echo "Vicinae installed successfully"
