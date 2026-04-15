@@ -41,11 +41,11 @@ COPY build /build
 COPY custom /custom
 # Copy from OCI containers to distinct subdirectories to avoid conflicts
 # Note: Renovate can automatically update these :latest tags to SHA-256 digests for reproducibility
-COPY --from=ghcr.io/projectbluefin/common:latest@sha256:a0b8d130cc41e5e9ae68d45964b9cce576f18257e8e5369715d89a91fe033016 /system_files /oci/common
+COPY --from=ghcr.io/projectbluefin/common:latest@sha256:b293a96dd194d4bc4a296f4b46ff71f80261e5b06099005d70be7110b5b32b2d /system_files /oci/common
 COPY --from=ghcr.io/ublue-os/brew:latest@sha256:615439b696bc0d9756850506f803e77a88cae032af1f933b876dddc2bd62d1f7 /system_files /oci/brew
 
 # Base Image - GNOME included
-FROM ghcr.io/ublue-os/silverblue-main:latest@sha256:2284db4829ac98eb047320e3f56d69b928249ef0efd714949ada1a92377619de
+FROM ghcr.io/ublue-os/silverblue-main:latest@sha256:3bd17a1229d63c101b8d1fd9e85b9e1f798eba5ee78cffe7f353e504206f5335
 FROM ghcr.io/ublue-os/bluefin-dx-nvidia-open:stable@sha256:48d71527a6601b7bcd350088afe6c8ad56076cfc6fa0694119443e3b0357c2fb
 
 ## Alternative base images, no desktop included (uncomment to use):
