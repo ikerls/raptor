@@ -19,6 +19,13 @@ jobs:
       contents: write
       pull-requests: write
     steps:
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
 
@@ -26,7 +33,7 @@ jobs:
         uses: renovatebot/github-action@b9486682a19fe4ea2dd1263c11b4e0c1fe1838fe # v40.3.2
         with:
           configurationFile: .github/renovate.json5
-          token: ${{ secrets.GITHUB_TOKEN }}
-        env:
+          token: ${{ steps.app-token.outputs.token }}
+          env:
           RENOVATE_REPOSITORIES: ${{ github.repository }}
           LOG_LEVEL: 'debug'
