@@ -14,7 +14,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up Homebrew
-        uses: Homebrew/actions/setup-homebrew@56e6e1830b3c103b917ea1a7d175dcf99b62e6fc # master
+        uses: Homebrew/actions/setup-homebrew@ac93e64636f67b85384f251de7359f58c5dee140 # master
 
       - name: Validate Brewfiles
         shell: bash
