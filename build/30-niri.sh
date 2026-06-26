@@ -16,4 +16,4 @@ dnf5 -y install noctalia-shell
 
 echo "Niri installed successfully"
 
-systemctl --global add-wants niri.service
+systemctl --global enable niri.service
