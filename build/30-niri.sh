@@ -4,15 +4,14 @@ set -eoux pipefail
 
 echo "Installing Niri..."
 
-# shellcheck source=/dev/null
-source /ctx/build/copr-helpers.sh
+dnf5 install -y --nogpgcheck \
+  --repofrompath "terra,https://repos.fyralabs.com/terra\$releasever" \
+  terra-release
 
-dnf5 -y install \
-    niri
-
-dnf5 -y install --nogpgcheck --repofrompath "terra,https://repos.fyralabs.com/terra\$releasever" terra-release
-
-dnf5 -y install noctalia-shell
+# Niri + Noctalia + useful Niri desktop bits
+dnf5 install -y \
+  niri \
+  noctalia-shell
 
 echo "Niri installed successfully"
 
