@@ -10,7 +10,7 @@ source /ctx/build/copr-helpers.sh
 dnf5 -y install \
     niri
 
-dnf5 -y install --nogpgcheck --repofrompath 'terra,https://repos.fyralabs.com/terra$releasever' terra-release
+dnf5 -y install --nogpgcheck --repofrompath "terra,https://repos.fyralabs.com/terra\$releasever" terra-release
 
 dnf5 -y install noctalia-shell
 
