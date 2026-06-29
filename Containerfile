@@ -45,7 +45,7 @@ COPY --from=ghcr.io/projectbluefin/common:latest@sha256:a2d19cfffe082ec7e5bdee03
 COPY --from=ghcr.io/ublue-os/brew:latest@sha256:9449d3ce4bec06b815dcf33bc5547cc76204317a59df01c511c63063679ec90a /system_files /oci/brew
 
 # Base Image - GNOME included
-FROM ghcr.io/ublue-os/silverblue-main:latest@sha256:961e2f1eb4c2fabd903968cae6b36db2e238630d90a97a3b2ffacf1be77fd6e0
+FROM ghcr.io/ublue-os/silverblue-main:latest@sha256:8cc0388a4c47ed031c0469c6b8bcffaa83eb8da2e0802e9c95650d4d36ce4f59
 FROM ghcr.io/ublue-os/bluefin-dx-nvidia-open:stable@sha256:839a2e4d802dce173780cb37d4ae5bf996e1c189c13e6b01a82793ae8e21abfd
 
 ## Alternative base images, no desktop included (uncomment to use):
