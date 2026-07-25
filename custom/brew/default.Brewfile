@@ -1,8 +1,3 @@
-# Default Brewfile for bluepilot
-# Add your favorite brew packages here
-#
-# Examples:
-
 # Modern CLI tools
 brew "bat"        # cat with syntax highlighting
 brew "eza"        # Modern replacement for ls
@@ -27,3 +22,5 @@ brew "stow"
 brew "restic"
 brew "rclone"
 brew "zellij"
+brew "mise"
+brew "pass-cli"

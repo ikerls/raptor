@@ -13,15 +13,17 @@ jobs:
     permissions:
       packages: write
     steps:
-      - name: Delete Images Older Than 90 Days
-        uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Cleanup old images
+        uses: projectbluefin/actions/bootc-build/ghcr-cleanup@edf8773321239d6a6ecb15ad3fd60bd0b99ccec5 # v1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          # IMPORTANT: Update this to match your image name from Containerfile (line 9)
+          # IMPORTANT: Update this to match your image name from Containerfile (# Name: comment)
           # This should match the "# Name: your-repo-name" comment in your Containerfile
           # Example: If your Containerfile has "# Name: my-custom-os", use "my-custom-os" here
           packages: raptor
           older-than: 90 days
-          delete-orphaned-images: true
           keep-n-tagged: 7
           keep-n-untagged: 7
+          github-token: ${{ secrets.GITHUB_TOKEN }}
