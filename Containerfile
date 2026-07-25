@@ -36,18 +36,19 @@ COPY custom /custom
 COPY --from=common /system_files /oci/common
 COPY --from=brew /system_files /oci/brew
 
-# Base Image - GNOME included (Fedora official OSTree desktop)
-# Renovate will keep the digest pin up to date.
-FROM quay.io/fedora-ostree-desktops/silverblue:44@sha256:2b8f8279b3c326e131ad6cb64aa416565053d268a5a337807141f353b0354696
+# Shared image - GNOME included (Fedora official OSTree desktop).
+# Both published variants inherit all layers produced by this stage.
+FROM quay.io/fedora-ostree-desktops/silverblue:44@sha256:2b8f8279b3c326e131ad6cb64aa416565053d268a5a337807141f353b0354696 AS shared
 
-# Image identity - these define how bootc, fastfetch, and the ublue ecosystem
-# recognize your image. Change these to match your project name.
-ARG IMAGE_NAME="raptor"
-ARG IMAGE_VENDOR="ikerls"
-ARG UBLUE_IMAGE_TAG="stable"
-ARG BASE_IMAGE_NAME="silverblue"
-ARG FEDORA_MAJOR_VERSION="44"
-ARG VERSION=""
+# Shared identity and build inputs. IMAGE_NAME and IMAGE_FLAVOR are declared
+# by each final target so direct target builds receive the correct defaults.
+ARG IMAGE_VENDOR=ikerls
+ARG UBLUE_IMAGE_TAG=stable
+ARG BASE_IMAGE_NAME=silverblue
+ARG FEDORA_MAJOR_VERSION=44
+ARG VERSION
+ARG SOURCE_REPOSITORY=ikerls/raptor
+ARG AKMODS_FLAVOR=main
 
 ### /opt
 ## Makes /opt writeable by default. Needs to be here to make the main image
@@ -57,18 +58,15 @@ ARG VERSION=""
 RUN rm /opt && mkdir /opt
 
 ### MODIFICATIONS
-## Make modifications desired in your image and install packages by modifying the build scripts.
+## Make modifications desired in your image and install packages by modifying
+## the common or variant build scripts.
 ## The following RUN directives mount the ctx stage which includes:
-##   - Local build scripts from /build
+##   - Shared build scripts from /build/common
+##   - Variant build scripts from /build/variants
 ##   - Local custom files from /custom
 ##   - Files from @projectbluefin/common at /oci/common (includes branding/artwork content)
 ##   - Files from @ublue-os/brew at /oci/brew
-## Scripts are run in numerical order (10-build.sh, 20-example.sh, etc.)
-
-RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
-    --mount=type=tmpfs,dst=/boot \
-    --mount=type=tmpfs,dst=/tmp \
-    /ctx/build/00-image-info.sh
+## Scripts within each directory are run in numerical order.
 
 # Set dnf options before build scripts (persists across subsequent RUN layers)
 RUN dnf5 config-manager setopt keepcache=1 install_weak_deps=0
@@ -79,33 +77,66 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=secret,id=GITHUB_TOKEN \
     --mount=type=tmpfs,dst=/boot \
     --mount=type=tmpfs,dst=/tmp \
-    for script in /ctx/build/[1-9]*.sh; do \
+    for script in /ctx/build/common/[1-9]*.sh; do \
         echo "Running ${script}..." && \
         bash "${script}" || exit 1; \
     done
 
-### CLEANUP
-## Use Bluefin's clean-stage.sh to remove build artifacts before linting.
-## /run is deliberately not mounted as tmpfs here: clean-stage.sh must remove
-## image-layer files such as /run/dnf so bootc lint's nonempty-run-tmp check
-## passes. The script tolerates busy Buildah bind mounts while clearing contents.
+###############################################################################
+# NVIDIA VARIANT
+###############################################################################
+FROM shared AS nvidia
+
+ARG IMAGE_NAME=raptor-nvidia
+ARG IMAGE_FLAVOR=nvidia
+
+RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
+    --mount=type=cache,dst=/var/cache/libdnf5 \
+    --mount=type=cache,dst=/var/cache/rpm-ostree \
+    --mount=type=secret,id=GITHUB_TOKEN \
+    --mount=type=tmpfs,dst=/boot \
+    --mount=type=tmpfs,dst=/tmp \
+    for script in /ctx/build/variants/nvidia/[1-9]*.sh; do \
+        echo "Running ${script}..." && \
+        bash "${script}" || exit 1; \
+    done
+
+RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
+    --mount=type=tmpfs,dst=/boot \
+    --mount=type=tmpfs,dst=/tmp \
+    /ctx/build/00-image-info.sh
+
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=tmpfs,dst=/tmp \
     --mount=type=tmpfs,dst=/boot \
     /ctx/build/clean-stage.sh
 
-### /opt
-## Makes /opt writeable by default. Needs to be here to make the main image
-## build strict (no /opt there). This is for downstream images/stuff like k0s.
-## If you need /opt as an immutable real directory for build-time packages
-## (e.g. google-chrome, docker-desktop), replace the next line with:
-##   RUN rm /opt && mkdir /opt
-# RUN rm -rf /opt && ln -s /var/opt /opt
-
-### INIT
-## Required for bootc images
 CMD ["/sbin/init"]
 
-### LINTING
-## Verify final image and contents are correct. --fatal-warnings catches issues.
+RUN bootc container lint --fatal-warnings
+
+###############################################################################
+# STANDARD VARIANT
+#
+# Keep this target last so a direct `podman build .` is NVIDIA-free.
+###############################################################################
+FROM shared AS standard
+
+ARG IMAGE_NAME=raptor
+ARG IMAGE_FLAVOR=main
+
+RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
+    --mount=type=tmpfs,dst=/boot \
+    --mount=type=tmpfs,dst=/tmp \
+    /ctx/build/00-image-info.sh
+
+# /run is deliberately not mounted as tmpfs here: clean-stage.sh must remove
+# image-layer files such as /run/dnf before bootc lint runs.
+RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
+    --mount=type=tmpfs,dst=/tmp \
+    --mount=type=tmpfs,dst=/boot \
+    /ctx/build/clean-stage.sh
+
+CMD ["/sbin/init"]
+
 RUN bootc container lint --fatal-warnings

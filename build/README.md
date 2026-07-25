@@ -1,77 +1,69 @@
-# Build Scripts
+# Build Scripts and Image Variants
 
-This directory contains build scripts that run during image creation. Scripts are executed in numerical order.
+The image uses a shared build stage and explicit final targets. Scripts run in
+numerical order within their directory.
 
-## How It Works
+## Directory Layout
 
-Scripts are named with a number prefix (e.g., `10-build.sh`, `20-onepassword.sh`) and run in ascending order during the container build process.
-
-## Included Scripts
-
-- **`10-build.sh`** - Main build script for base system modifications, package installation, and service configuration
-
-## Example Scripts
-
-- **`20-onepassword.sh.example`** - Example showing how to install software from third-party RPM repositories (Google Chrome, 1Password)
-
-To use an example script:
-1. Remove the `.example` extension
-2. Make it executable: `chmod +x build/20-yourscript.sh`
-3. The build system will automatically run it in numerical order
-
-## Creating Your Own Scripts
-
-Create numbered scripts for different purposes:
-
-```bash
-# 10-build.sh - Base system (already exists)
-# 20-drivers.sh - Hardware drivers  
-# 30-development.sh - Development tools
-# 40-gaming.sh - Gaming software
-# 50-cleanup.sh - Final cleanup tasks
+```text
+build/
+├── common/                    # Runs for every image
+│   ├── 10-build.sh
+│   └── 20-*.sh
+├── variants/
+│   └── nvidia/
+│       └── 40-nvidia.sh       # Runs only for the NVIDIA target
+├── 00-image-info.sh           # Writes final image identity
+├── clean-stage.sh             # Cleans each final image before linting
+└── copr-helpers.sh             # Shared helper functions
 ```
 
-### Script Template
+The published variants are:
+
+- `raptor:stable` — standard image; runs only `build/common/*.sh`.
+- `raptor-nvidia:stable` — runs the common scripts, then
+  `build/variants/nvidia/*.sh`.
+
+The `standard` Containerfile target is last and is therefore the safe default
+for a direct `podman build .`.
+
+## Local Builds
+
+```bash
+just build
+just build-nvidia
+
+# Equivalent explicit commands
+just build raptor stable standard
+just build raptor-nvidia stable nvidia
+```
+
+## Adding Scripts
+
+Add changes needed by every image to `build/common/`. Add hardware- or
+purpose-specific changes beneath `build/variants/<variant>/`.
 
 ```bash
 #!/usr/bin/env bash
-set -oue pipefail
+set -euo pipefail
 
-echo "Running custom setup..."
-# Your commands here
+echo "::group:: ===$(basename "$0")==="
+
+dnf5 install -y package-name
+
+echo "::endgroup::"
 ```
 
-### Best Practices
+Use the numbered convention (`10-*`, `20-*`, `30-*`, and so on), keep one
+purpose per script, use `dnf5 -y` for non-interactive package operations, and
+remove or disable temporary repositories before the script exits.
 
-- **Use descriptive names**: `20-nvidia-drivers.sh` is better than `20-stuff.sh`
-- **One purpose per script**: Easier to debug and maintain
-- **Clean up after yourself**: Remove temporary files and disable temporary repos
-- **Test incrementally**: Add one script at a time and test builds
-- **Comment your code**: Future you will thank present you
+To add another image variant:
 
-### Disabling Scripts
+1. Create `build/variants/<variant>/` with numbered scripts.
+2. Add a final Containerfile target inheriting from `shared`.
+3. Add the variant-to-flavor mapping in the `build` Just recipe.
+4. Add the image suffix and flavor to the workflow matrix.
+5. Add the package to the cleanup matrix.
 
-To temporarily disable a script without deleting it:
-- Rename it with `.disabled` extension: `20-script.sh.disabled`
-- Or remove execute permission: `chmod -x build/20-script.sh`
-
-## Execution Order
-
-The Containerfile runs scripts like this:
-
-```dockerfile
-RUN /ctx/build/10-build.sh
-```
-
-If you want to run multiple scripts, you can:
-
-1. **Modify Containerfile** to run each script explicitly
-2. **Create a runner script** that executes all numbered scripts
-3. **Use the default** and keep everything in `10-build.sh` (simplest)
-
-## Notes
-
-- Scripts run as root during build
-- Build context is available at `/ctx`
-- Use dnf5 for package management (not dnf or yum)
-- Always use `-y` flag for non-interactive installs
+All scripts run as root with the repository build context mounted at `/ctx`.

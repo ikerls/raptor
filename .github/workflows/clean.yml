@@ -9,7 +9,14 @@ concurrency:
 
 jobs:
   delete-older-than-90:
+    name: Cleanup ${{ matrix.package }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - raptor
+          - raptor-nvidia
     permissions:
       packages: write
     steps:
@@ -19,10 +26,7 @@ jobs:
       - name: Cleanup old images
         uses: projectbluefin/actions/bootc-build/ghcr-cleanup@edf8773321239d6a6ecb15ad3fd60bd0b99ccec5 # v1
         with:
-          # IMPORTANT: Update this to match your image name from Containerfile (# Name: comment)
-          # This should match the "# Name: your-repo-name" comment in your Containerfile
-          # Example: If your Containerfile has "# Name: my-custom-os", use "my-custom-os" here
-          packages: raptor
+          packages: ${{ matrix.package }}
           older-than: 90 days
           keep-n-tagged: 7
           keep-n-untagged: 7

@@ -58,10 +58,22 @@ Use @projectbluefin/finpilot as a template, name the OS the repository name. Ens
 - See [custom/ujust/README.md](custom/ujust/README.md) for details
 
 ### Build Scripts
-- Modular numbered scripts (10-, 20-, 30-) run in order
-- Example scripts included for third-party repositories and desktop replacement
+- Shared numbered scripts run for both images
+- Variant scripts are isolated under `build/variants/`
+- NVIDIA packages and kernel arguments are included only in `raptor-nvidia`
 - Helper functions for safe COPR usage
 - See [build/README.md](build/README.md) for details
+
+### Image Variants
+
+| Image | Containerfile target | GPU support |
+| --- | --- | --- |
+| `ghcr.io/ikerls/raptor:stable` | `standard` | No NVIDIA packages |
+| `ghcr.io/ikerls/raptor-nvidia:stable` | `nvidia` | NVIDIA open driver and container toolkit |
+
+Both images are built on main pushes, scheduled builds, and manual workflow
+runs. Every successful build updates `:stable`; dated and `stable-daily`
+aliases are retained for rollback and compatibility.
 
 ## Quick Start
 
@@ -96,7 +108,7 @@ Choose your base image in `Containerfile` (line 23):
 FROM ghcr.io/ublue-os/bluefin:stable
 ```
 
-Add your packages in `build/10-build.sh`:
+Add packages shared by both images in `build/common/10-build.sh`:
 ```bash
 dnf5 install -y package-name
 ```
@@ -120,9 +132,14 @@ All changes should be made via pull requests:
 
 ### 6. Deploy Your Image
 
-Switch to your image:
+Switch to the image matching your hardware:
 ```bash
+# Standard
 sudo bootc switch ghcr.io/your-username/your-repo-name:stable
+
+# NVIDIA
+sudo bootc switch ghcr.io/your-username/your-repo-name-nvidia:stable
+
 sudo systemctl reboot
 ```
 
@@ -291,9 +308,15 @@ This template follows the **multi-stage build architecture** from @projectbluefi
 - **@ublue-os/artwork** - Artwork shared with Aurora and Bazzite
 - **@ublue-os/brew** - Homebrew integration
 
-**Stage 2: Base Image** - Default options:
-- `ghcr.io/ublue-os/silverblue-main:latest` (Fedora-based, default)
-- `quay.io/centos-bootc/centos-bootc:stream10` (CentOS-based alternative)
+**Stage 2: Shared Image** - Applies the Fedora base, Bluefin resources, custom
+files, and all scripts from `build/common/`.
+
+**Stage 3: Final Variants**
+
+- `standard` adds no hardware-specific scripts.
+- `nvidia` executes `build/variants/nvidia/40-nvidia.sh`.
+- Both targets generate their own image identity, clean the image, and run
+  `bootc container lint --fatal-warnings`.
 
 ### Benefits of This Architecture
 
@@ -326,7 +349,8 @@ Your build scripts can access these files at:
 Test your changes before pushing:
 
 ```bash
-just build              # Build container image
+just build              # Build raptor:stable (standard)
+just build-nvidia       # Build raptor-nvidia:stable
 just build-qcow2        # Build VM disk image
 just run-vm-qcow2       # Test in browser-based VM
 ```

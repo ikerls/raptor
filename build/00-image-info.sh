@@ -11,31 +11,28 @@ set -euo pipefail
 # Required env vars (set as ARGs in Containerfile):
 #   IMAGE_NAME          - Image name (e.g. finpilot, my-custom-os)
 #   IMAGE_VENDOR        - Image vendor/owner (e.g. github username or org)
+#   IMAGE_FLAVOR        - Image flavor (e.g. main, nvidia)
 #   UBLUE_IMAGE_TAG     - Image tag/stream (e.g. stable, testing, latest)
 #   BASE_IMAGE_NAME     - Base image name (e.g. silverblue)
 #   FEDORA_MAJOR_VERSION - Fedora version (e.g. 42)
 #   VERSION             - Full version string (e.g. stable-42.20250531)
+#   SOURCE_REPOSITORY   - Source repository in owner/name form
 #   SHA_HEAD_SHORT      - Short git SHA (optional, for dev builds)
 ###############################################################################
 
 # Branding — customize these for your image
 IMAGE_PRETTY_NAME="${IMAGE_PRETTY_NAME:-raptor}"
 IMAGE_LIKE="${IMAGE_LIKE:-fedora}"
-HOME_URL="${HOME_URL:-https://github.com/${IMAGE_VENDOR}/${IMAGE_NAME}}"
-DOCUMENTATION_URL="${DOCUMENTATION_URL:-https://github.com/${IMAGE_VENDOR}/${IMAGE_NAME}/blob/main/README.md}"
-SUPPORT_URL="${SUPPORT_URL:-https://github.com/${IMAGE_VENDOR}/${IMAGE_NAME}/issues}"
-BUG_REPORT_URL="${BUG_REPORT_URL:-https://github.com/${IMAGE_VENDOR}/${IMAGE_NAME}/issues/new}"
+IMAGE_FLAVOR="${IMAGE_FLAVOR:-main}"
+SOURCE_REPOSITORY="${SOURCE_REPOSITORY:-${IMAGE_VENDOR}/${IMAGE_NAME}}"
+HOME_URL="${HOME_URL:-https://github.com/${SOURCE_REPOSITORY}}"
+DOCUMENTATION_URL="${DOCUMENTATION_URL:-https://github.com/${SOURCE_REPOSITORY}/blob/main/README.md}"
+SUPPORT_URL="${SUPPORT_URL:-https://github.com/${SOURCE_REPOSITORY}/issues}"
+BUG_REPORT_URL="${BUG_REPORT_URL:-https://github.com/${SOURCE_REPOSITORY}/issues/new}"
 
 # Paths
 IMAGE_INFO="/usr/share/ublue-os/image-info.json"
 OS_RELEASE="/usr/lib/os-release"
-
-# Derive image flavor from name
-if [[ "${IMAGE_NAME}" =~ nvidia ]]; then
-	IMAGE_FLAVOR="nvidia"
-else
-	IMAGE_FLAVOR="main"
-fi
 
 # Image ref (used by bootc for upgrade source)
 IMAGE_REF="ostree-image-signed:docker://ghcr.io/${IMAGE_VENDOR}/${IMAGE_NAME}"

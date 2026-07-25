@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -oue pipefail
+set -euo pipefail
 
 ### Install 1Password from Official Repository
 echo "Installing 1Password..."

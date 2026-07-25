@@ -75,22 +75,42 @@ sudoif command *args:
 # Arguments:
 #   $target_image - The tag you want to apply to the image (default: $IMAGE_NAME).
 #   $tag - The tag for the image (default: $DEFAULT_TAG).
+#   $variant - Containerfile target: standard or nvidia (default: standard).
 #
 # The script constructs the version string using the Fedora major version, tag,
 # and the current date. If the git working directory is clean, it also includes
 # the short SHA of the current HEAD.
 #
-# just build $target_image $tag
+# just build $target_image $tag $variant
 #
 # Example usage:
-#   just build aurora lts
+#   just build raptor-nvidia stable nvidia
 #
-# This will build an image 'aurora:lts' with DX and GDX enabled.
+# This builds the NVIDIA image as 'raptor-nvidia:stable'.
 #
 
 # Build the image using the specified parameters
-build $target_image=IMAGE_NAME $tag=DEFAULT_TAG:
+build $target_image=IMAGE_NAME $tag=DEFAULT_TAG $variant="standard":
     #!/usr/bin/env bash
+    set -euo pipefail
+
+    case "${variant}" in
+        standard)
+            image_flavor="main"
+            ;;
+        nvidia)
+            image_flavor="nvidia"
+            ;;
+        *)
+            echo "ERROR: Unsupported image variant '${variant}'. Expected: standard or nvidia."
+            exit 1
+            ;;
+    esac
+
+    image_identity="${target_image##*/}"
+    source_repository="${GITHUB_REPOSITORY:-${REPO_ORG}/${IMAGE_NAME}}"
+    source_revision="${GITHUB_SHA:-main}"
+    source_url="https://github.com/${source_repository}"
 
     # Read the Fedora major version from Containerfile (single source of truth).
     # The base image itself is pinned in the Containerfile FROM line.
@@ -128,11 +148,16 @@ build $target_image=IMAGE_NAME $tag=DEFAULT_TAG:
         BUILD_ARGS+=("--build-arg" "SHA_HEAD_SHORT=$(git rev-parse --short HEAD)")
     fi
 
-    # Image identity ARGs - these define how bootc/ublue ecosystem recognizes the image
-    # Override via env vars: IMAGE_NAME, IMAGE_VENDOR, UBLUE_IMAGE_TAG
-    BUILD_ARGS+=("--build-arg" "IMAGE_NAME=${IMAGE_NAME:-${target_image}}")
+    # Image identity ARGs define how bootc and the ublue ecosystem recognize
+    # the selected image independently from the source repository name.
+    BUILD_ARGS+=("--build-arg" "IMAGE_NAME=${image_identity}")
     BUILD_ARGS+=("--build-arg" "IMAGE_VENDOR=${IMAGE_VENDOR:-${REPO_ORG}}")
+    BUILD_ARGS+=("--build-arg" "IMAGE_FLAVOR=${image_flavor}")
     BUILD_ARGS+=("--build-arg" "UBLUE_IMAGE_TAG=${UBLUE_IMAGE_TAG:-${tag}}")
+    BUILD_ARGS+=("--build-arg" "SOURCE_REPOSITORY=${source_repository}")
+    if [[ "${variant}" == "nvidia" ]]; then
+        BUILD_ARGS+=("--build-arg" "AKMODS_FLAVOR=${AKMODS_FLAVOR:-main}")
+    fi
 
     # Add GitHub token as build secret if available (for CI/CD)
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
@@ -142,14 +167,14 @@ build $target_image=IMAGE_NAME $tag=DEFAULT_TAG:
 
     # Labels for ArtifactHub and OCI metadata
     LABELS=()
-    LABELS+=("--label" "org.opencontainers.image.title=${target_image}")
+    LABELS+=("--label" "org.opencontainers.image.title=${image_identity}")
     LABELS+=("--label" "org.opencontainers.image.version=${ver}")
     LABELS+=("--label" "org.opencontainers.image.description=${IMAGE_DESC:-My Customized Universal Blue Image}")
-    LABELS+=("--label" "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY_OWNER:-}/${target_image}/blob/${GITHUB_SHA:-}/Containerfile")
-    LABELS+=("--label" "org.opencontainers.image.url=https://github.com/${GITHUB_REPOSITORY_OWNER:-}/${target_image}")
+    LABELS+=("--label" "org.opencontainers.image.source=${source_url}/blob/${source_revision}/Containerfile")
+    LABELS+=("--label" "org.opencontainers.image.url=${source_url}")
     LABELS+=("--label" "org.opencontainers.image.vendor=${IMAGE_VENDOR:-${REPO_ORG}}")
     LABELS+=("--label" "org.opencontainers.image.created=$(date -u +%Y\-%m\-%d\T%H\:%M\:%S\Z)")
-    LABELS+=("--label" "io.artifacthub.package.readme-url=https://raw.githubusercontent.com/${GITHUB_REPOSITORY_OWNER:-}/${target_image}/refs/heads/main/README.md")
+    LABELS+=("--label" "io.artifacthub.package.readme-url=https://raw.githubusercontent.com/${source_repository}/refs/heads/main/README.md")
     LABELS+=("--label" "io.artifacthub.package.logo-url=${IMAGE_LOGO_URL:-https://avatars.githubusercontent.com/u/120078124?s=200&v=4}")
     LABELS+=("--label" "io.artifacthub.package.keywords=${IMAGE_KEYWORDS:-bootc,ublue,universal-blue}")
     LABELS+=("--label" "io.artifacthub.package.license=Apache-2.0")
@@ -160,7 +185,7 @@ build $target_image=IMAGE_NAME $tag=DEFAULT_TAG:
     # Cache write (REGISTRY_CACHE_WRITE=1) is set by CI for non-PR builds only
     # PR builds and local builds are read-only to prevent cache poisoning
     CACHE_ARGS=()
-    cache_ref="ghcr.io/${IMAGE_VENDOR:-${REPO_ORG}}/${target_image}"
+    cache_ref="ghcr.io/${IMAGE_VENDOR:-${REPO_ORG}}/${image_identity}"
     if skopeo list-tags "docker://${cache_ref}" >/dev/null 2>&1; then
         CACHE_ARGS+=("--cache-from" "${cache_ref}")
         if [[ "${REGISTRY_CACHE_WRITE:-0}" == "1" ]]; then
@@ -173,8 +198,13 @@ build $target_image=IMAGE_NAME $tag=DEFAULT_TAG:
         "${LABELS[@]}" \
         "${CACHE_ARGS[@]}" \
         --pull=newer \
+        --target "${variant}" \
         --tag "${target_image}:${tag}" \
         .
+
+[group('Image')]
+build-nvidia $tag=DEFAULT_TAG:
+    just build "{{ IMAGE_NAME }}-nvidia" "{{ tag }}" nvidia
 
 # Tag images with the generated alias tags
 # Bluefin pattern: separate tagging from pushing

@@ -41,9 +41,19 @@ concurrency:
 
 jobs:
   build:
-    name: Build and push image
+    name: Build and push ${{ matrix.variant }} image
     runs-on: ubuntu-24.04
     timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: standard
+            image_suffix: ""
+            image_flavor: main
+          - variant: nvidia
+            image_suffix: "-nvidia"
+            image_flavor: nvidia
     permissions:
       contents: read
       packages: write
@@ -53,8 +63,10 @@ jobs:
     steps:
       - name: Prepare environment
         run: |
-          echo "IMAGE_REGISTRY=${IMAGE_REGISTRY,,}" >> ${GITHUB_ENV}
-          echo "IMAGE_NAME=${IMAGE_NAME,,}" >> ${GITHUB_ENV}
+          base_image="${IMAGE_NAME,,}"
+          echo "IMAGE_REGISTRY=${IMAGE_REGISTRY,,}" >> "${GITHUB_ENV}"
+          echo "IMAGE_NAME=${base_image}" >> "${GITHUB_ENV}"
+          echo "TARGET_IMAGE=${base_image}${{ matrix.image_suffix }}" >> "${GITHUB_ENV}"
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -65,7 +77,7 @@ jobs:
         with:
           registry: ghcr.io
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          image-name: ${{ env.IMAGE_NAME }}
+          image-name: ${{ env.TARGET_IMAGE }}
 
       - name: Setup runner
         uses: projectbluefin/actions/bootc-build/setup-runner@edf8773321239d6a6ecb15ad3fd60bd0b99ccec5 # v1
@@ -79,7 +91,7 @@ jobs:
         uses: projectbluefin/actions/bootc-build/dnf-cache@edf8773321239d6a6ecb15ad3fd60bd0b99ccec5 # v1
         with:
           action: restore
-          cache-name: ${{ env.IMAGE_NAME }}
+          cache-name: ${{ env.TARGET_IMAGE }}
           cache-bust: ${{ hashFiles('**/Containerfile') }}
 
       - name: Detect changes
@@ -99,7 +111,7 @@ jobs:
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          TARGET_IMAGE: ${{ env.TARGET_IMAGE }}
           IMAGE_VENDOR: ${{ env.IMAGE_VENDOR }}
           DEFAULT_TAG: ${{ env.DEFAULT_TAG }}
           REGISTRY_CACHE_WRITE: ${{ env.REGISTRY_CACHE_WRITE }}
@@ -108,17 +120,20 @@ jobs:
           max_attempts: 3
           retry_wait_seconds: 300
           command: |
-            sudo -E "$(command -v just)" build "${IMAGE_NAME}" "${DEFAULT_TAG}"
+            sudo -E "$(command -v just)" build \
+              "${TARGET_IMAGE}" \
+              "${DEFAULT_TAG}" \
+              "${{ matrix.variant }}"
 
       - name: Get version label
         if: steps.detect-changes.outputs.should_build == 'true' || github.event_name != 'pull_request'
         id: version
         shell: bash
         env:
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          TARGET_IMAGE: ${{ env.TARGET_IMAGE }}
           DEFAULT_TAG: ${{ env.DEFAULT_TAG }}
         run: |
-          VERSION_LABEL=$(sudo podman inspect "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" \
+          VERSION_LABEL=$(sudo podman inspect "localhost/${TARGET_IMAGE}:${DEFAULT_TAG}" \
             --format '{{index .Config.Labels "org.opencontainers.image.version"}}')
           echo "version=${VERSION_LABEL}" >> $GITHUB_OUTPUT
           echo "Version: ${VERSION_LABEL}"
@@ -128,18 +143,36 @@ jobs:
         id: generate-tags
         uses: projectbluefin/actions/bootc-build/generate-tags@edf8773321239d6a6ecb15ad3fd60bd0b99ccec5 # v1
         with:
-          base-name: ${{ env.IMAGE_NAME }}
+          base-name: ${{ env.TARGET_IMAGE }}
           stream-name: ${{ env.DEFAULT_TAG }}
+          image-flavor: ${{ matrix.image_flavor }}
           version-label: ${{ steps.version.outputs.version }}
           event-name: ${{ github.event_name }}
           pr-number: ${{ github.event.number }}
+
+      # projectbluefin's stable stream normally moves :stable only on promotion
+      # days. Raptor intentionally publishes :stable after every successful
+      # automated build while retaining the generated daily/version aliases.
+      - name: Prepare release tags
+        if: steps.detect-changes.outputs.should_build == 'true' || github.event_name != 'pull_request'
+        id: release-tags
+        shell: bash
+        env:
+          GENERATED_TAGS: ${{ steps.generate-tags.outputs.tags }}
+        run: |
+          tags="${GENERATED_TAGS}"
+          if [[ " ${tags} " != *" stable "* ]]; then
+            tags="${tags} stable"
+          fi
+          echo "tags=${tags}" >> "${GITHUB_OUTPUT}"
+          echo "default-tag=stable" >> "${GITHUB_OUTPUT}"
 
       - name: Save DNF cache
         if: always() && !cancelled() && github.event_name != 'pull_request'
         uses: projectbluefin/actions/bootc-build/dnf-cache@edf8773321239d6a6ecb15ad3fd60bd0b99ccec5 # v1
         with:
           action: save
-          cache-name: ${{ env.IMAGE_NAME }}
+          cache-name: ${{ env.TARGET_IMAGE }}
           allow-write: ${{ github.event_name != 'pull_request' && 'true' || 'false' }}
           cache-bust: ${{ hashFiles('**/Containerfile') }}
 
@@ -158,18 +191,20 @@ jobs:
       #   id: rechunk-image
       #   uses: projectbluefin/actions/bootc-build/chunka@6231015b336556d2ff0adc1d1e59514bf19dcb42 # v1
       #   with:
-      #     source-image: localhost/${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}
+      #     source-image: localhost/${{ env.TARGET_IMAGE }}:${{ env.DEFAULT_TAG }}
       #     max-layers: 128
 
       - name: Tag images
         if: github.event_name != 'pull_request'
         shell: bash
         env:
-          ALIAS_TAGS: ${{ steps.generate-tags.outputs.tags }}
+          ALIAS_TAGS: ${{ steps.release-tags.outputs.tags }}
+          TARGET_IMAGE: ${{ env.TARGET_IMAGE }}
         run: |
-          sudo -E "$(command -v just)" tag-images "${IMAGE_NAME}" \
-                          "${DEFAULT_TAG}" \
-                          "${ALIAS_TAGS}"
+          sudo -E "$(command -v just)" tag-images \
+            "${TARGET_IMAGE}" \
+            "${DEFAULT_TAG}" \
+            "${ALIAS_TAGS}"
 
       - name: Login to GitHub Container Registry
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
@@ -184,9 +219,9 @@ jobs:
         id: push
         uses: projectbluefin/actions/bootc-build/push-image@edf8773321239d6a6ecb15ad3fd60bd0b99ccec5 # v1
         with:
-          image-name: ${{ env.IMAGE_NAME }}
-          tags: ${{ steps.generate-tags.outputs.tags }}
-          default-tag: ${{ steps.generate-tags.outputs.default-tag }}
+          image-name: ${{ env.TARGET_IMAGE }}
+          tags: ${{ steps.release-tags.outputs.tags }}
+          default-tag: ${{ steps.release-tags.outputs.default-tag }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Sign and publish
@@ -194,7 +229,7 @@ jobs:
         continue-on-error: true
         uses: projectbluefin/actions/bootc-build/sign-and-publish@6231015b336556d2ff0adc1d1e59514bf19dcb42 # v1
         with:
-          image: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}
+          image: ${{ env.IMAGE_REGISTRY }}/${{ env.TARGET_IMAGE }}
           digest: ${{ steps.push.outputs.digest }}
           signing-mode: keyless
           generate-sbom: false
@@ -206,14 +241,14 @@ jobs:
         if: steps.detect-changes.outputs.should_build == 'true' || github.event_name != 'pull_request'
         shell: bash
         run: |
-          IMAGE_SIZE=$(sudo podman image inspect "localhost/${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}" \
+          IMAGE_SIZE=$(sudo podman image inspect "localhost/${{ env.TARGET_IMAGE }}:${{ env.DEFAULT_TAG }}" \
             --format '{{.Size}}' 2>/dev/null || echo "0")
           IMAGE_SIZE_MB=$(( IMAGE_SIZE / 1024 / 1024 ))
-          LAYER_COUNT=$(sudo podman image inspect "localhost/${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}" \
+          LAYER_COUNT=$(sudo podman image inspect "localhost/${{ env.TARGET_IMAGE }}:${{ env.DEFAULT_TAG }}" \
             --format '{{len .RootFS.Layers}}' 2>/dev/null || echo "?")
 
           {
-            echo "## Build Telemetry: ${{ env.IMAGE_NAME }}"
+            echo "## Build Telemetry: ${{ env.TARGET_IMAGE }}"
             echo ""
             echo "**Image size (uncompressed):** ${IMAGE_SIZE_MB} MB"
             echo "**Layer count:** ${LAYER_COUNT}"
