@@ -31,7 +31,8 @@
       "matchUpdateTypes": ["digest", "pin", "pinDigest"],
       "automerge": true,
       "automergeType": "pr",
-      "automergeStrategy": "squash"
+      "automergeStrategy": "squash",
+      "labels": ["renovate", "automerge"]
     },
     {
       "description": "Keep the shared projectbluefin actions channel fresh",
@@ -39,14 +40,16 @@
       "matchUpdateTypes": ["digest", "pinDigest", "pin", "patch", "minor"],
       "automerge": true,
       "automergeType": "pr",
-      "automergeStrategy": "squash"
+      "automergeStrategy": "squash",
+      "labels": ["renovate", "automerge"]
     },
     {
       "description": "Keep first-party OCI context images fresh immediately",
       "matchDepNames": ["ghcr.io/projectbluefin/common", "ghcr.io/ublue-os/brew"],
       "matchUpdateTypes": ["digest", "pinDigest", "pin"],
       "automerge": true,
-      "schedule": ["at any time"]
+      "schedule": ["at any time"],
+      "labels": ["renovate", "automerge"]
     },
     {
       "description": "Do not automatically cross Fedora major releases",
