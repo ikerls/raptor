@@ -8,6 +8,7 @@
 contents = """
 %post
 # After installation, switch to the custom image from this repository
+# Raptor production image
 bootc switch --mutate-in-place --transport registry ghcr.io/ikerls/raptor:stable
 %end
 """

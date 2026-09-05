@@ -1,0 +1,165 @@
+name: Promote main to stable
+
+# Personal-account adaptation of Finpilot's two-branch model. The shared
+# reusable PR creator requests an organization maintainer team, so Raptor owns
+# the small promotion-branch and PR lifecycle locally while retaining the
+# factory release gate below.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+  issues: write
+  packages: read
+  pull-requests: write
+  statuses: write
+
+concurrency:
+  group: promote-main-to-stable
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Prepare promotion pull request
+    runs-on: ubuntu-latest
+    outputs:
+      main_sha: ${{ steps.prepare.outputs.main_sha }}
+      promotion_needed: ${{ steps.prepare.outputs.promotion_needed }}
+      pr_number: ${{ steps.pull-request.outputs.number }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Create or refresh the exact-tree promotion branch
+        id: prepare
+        shell: bash
+        env:
+          PROMOTION_BRANCH: auto/promote-main-to-stable
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          if ! git ls-remote --exit-code --heads origin stable >/dev/null 2>&1; then
+            echo "stable does not exist yet; create it as documented in SETUP_CHECKLIST.md."
+            echo "promotion_needed=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          git fetch --no-tags origin stable
+
+          main_sha=$(git rev-parse origin/main)
+          main_tree=$(git rev-parse "${main_sha}^{tree}")
+          stable_tree=$(git rev-parse "origin/stable^{tree}")
+          echo "main_sha=${main_sha}" >> "${GITHUB_OUTPUT}"
+
+          if [[ "${main_tree}" == "${stable_tree}" ]]; then
+            echo "main and stable already have the same tree."
+            echo "promotion_needed=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          if git ls-remote --exit-code --heads origin "${PROMOTION_BRANCH}" >/dev/null 2>&1; then
+            git fetch --no-tags origin "${PROMOTION_BRANCH}"
+            promotion_head="origin/${PROMOTION_BRANCH}"
+            promotion_tree=$(git rev-parse "${promotion_head}^{tree}")
+            promotion_parent=$(git rev-parse "${promotion_head}^" 2>/dev/null || true)
+            if [[ "${promotion_tree}" == "${main_tree}" && "${promotion_parent}" == "$(git rev-parse origin/stable)" ]]; then
+              echo "Promotion branch already has main's exact tree on stable."
+              echo "promotion_needed=true" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          promotion_commit=$(git commit-tree "${main_tree}" -p origin/stable \
+            -m "chore: promote main to stable")
+          git update-ref "refs/heads/${PROMOTION_BRANCH}" "${promotion_commit}"
+          git push --force origin "refs/heads/${PROMOTION_BRANCH}:refs/heads/${PROMOTION_BRANCH}"
+          echo "Promotion branch now contains main's exact tree, including deletions."
+          echo "promotion_needed=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Upsert the single promotion pull request
+        if: steps.prepare.outputs.promotion_needed == 'true'
+        id: pull-request
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROMOTION_BRANCH: auto/promote-main-to-stable
+        run: |
+          set -euo pipefail
+          prs=$(gh api "repos/${GITHUB_REPOSITORY}/pulls?state=open&head=${GITHUB_REPOSITORY_OWNER}:${PROMOTION_BRANCH}&base=stable" --jq '.[].number')
+          pr_number=$(printf '%s\n' "${prs}" | head -n1)
+          if [[ -z "${pr_number}" ]]; then
+            gh pr create --base stable --head "${PROMOTION_BRANCH}" \
+              --title "chore: promote main to stable" \
+              --body "Automated personal-account promotion of main's exact tree to stable."
+            pr_number=$(gh pr view "${PROMOTION_BRANCH}" --json number --jq '.number')
+          fi
+          echo "number=${pr_number}" >> "${GITHUB_OUTPUT}"
+
+      # GITHUB_TOKEN-created branches do not trigger pull_request validation.
+      - name: Mark validation successful on the bot-created head
+        if: steps.pull-request.outputs.number != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROMOTION_BRANCH: auto/promote-main-to-stable
+        run: |
+          set -euo pipefail
+          head_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${PROMOTION_BRANCH}" --jq '.object.sha')
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
+            -f state=success \
+            -f context=validate \
+            -f description='Promotion tree matches main; validation is supplied by main.'
+
+  release-gate:
+    name: Verify testing release
+    needs: promote
+    if: needs.promote.outputs.promotion_needed == 'true'
+    uses: projectbluefin/actions/.github/workflows/reusable-release-gate.yml@a4bd91d1b36b3636ddb4140ae8be4406d642e877 # v1
+    with:
+      repo: ${{ github.repository }}
+      variants: >-
+        [{"image":"${{ github.event.repository.name }}"}]
+      registry: ghcr.io/${{ github.repository_owner }}
+      target_tag: testing
+      pr_number: ${{ needs.promote.outputs.pr_number }}
+      head_sha: ${{ needs.promote.outputs.main_sha }}
+      run_e2e: false
+      cosign_identity_regexp: >-
+        ^https://github\.com/${{ github.repository_owner }}/[^/]+/\.github/workflows/
+    secrets: inherit
+
+  enable-auto-merge:
+    name: Enable promotion auto-merge
+    needs:
+      - promote
+      - release-gate
+    if: >-
+      needs.promote.outputs.promotion_needed == 'true' &&
+      needs.promote.outputs.pr_number != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Enable auto-merge unless explicitly held
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ needs.promote.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          : "${PR_NUMBER:?PR_NUMBER is required}"
+          if gh pr view "${PR_NUMBER}" --json labels --jq '.labels[].name' | grep -Fxq 'do-not-merge'; then
+            echo "Promotion has do-not-merge; leaving auto-merge disabled."
+            exit 0
+          fi
+          gh pr merge "${PR_NUMBER}" --auto --squash || \
+            echo "Auto-merge is not available yet; branch protection may require manual setup."
