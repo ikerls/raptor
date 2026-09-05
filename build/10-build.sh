@@ -16,16 +16,6 @@ source /ctx/build/copr-helpers.sh
 # Enable nullglob for all glob operations to prevent failures on empty matches
 shopt -s nullglob
 
-echo "::group:: Copy Bluefin Config from Common"
-
-# Copy just files from @projectbluefin/common (includes 00-entry.just which imports 60-custom.just)
-mkdir -p /usr/share/ublue-os/just/
-shopt -s nullglob
-cp -r /ctx/oci/common/bluefin/usr/share/ublue-os/just/* /usr/share/ublue-os/just/
-shopt -u nullglob
-
-echo "::endgroup::"
-
 echo "::group:: Overlay Brew Integration Files"
 
 # Brew integration files from @ublue-os/brew OCI (tarball, systemd services, shell integration)
@@ -40,6 +30,7 @@ mkdir -p /usr/share/ublue-os/homebrew/
 cp /ctx/custom/brew/*.Brewfile /usr/share/ublue-os/homebrew/
 
 # Consolidate Just Files
+mkdir -p /usr/share/ublue-os/just/
 find /ctx/custom/ujust -iname '*.just' -exec printf "\n\n" \; -exec cat {} \; >>/usr/share/ublue-os/just/60-custom.just
 
 # Copy Flatpak preinstall files
@@ -50,9 +41,9 @@ echo "::endgroup::"
 
 echo "::group:: Install Packages"
 
-# Install a minimal package to verify the cache is working
-# This ensures the DNF cache is populated for future builds
-dnf5 install -y tmux
+# Install the default packages and verify the DNF cache is working.
+# gum is required by the default ujust recipes for interactive prompts.
+# dnf5 install -y tmux gum
 
 # Example using COPR with isolated pattern:
 # copr_install_isolated "ublue-os/staging" package-name
