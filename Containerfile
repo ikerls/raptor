@@ -38,7 +38,7 @@ COPY --from=brew /system_files /oci/brew
 
 # Base Image - GNOME included (Fedora official OSTree desktop)
 # Renovate will keep the digest pin up to date.
-FROM ghcr.io/ublue-os/bluefin-dx-nvidia-open:stable@sha256:828b7249112dd568b76ac5b62ee7f6000e216caa0d66ee803459706abb5635f3
+FROM ghcr.io/ublue-os/bluefin-dx-nvidia-open:stable@sha256:5418ebc681dfa852c675a997fe2769fafeeb5f1b561830cb4435718a95aeda52
 
 # Image identity - these define how bootc, fastfetch, and the ublue ecosystem
 # recognize your image. Change these to match your project name.
